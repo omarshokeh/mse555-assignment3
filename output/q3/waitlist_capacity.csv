@@ -1,0 +1,5 @@
+cluster,n_waitlist_clients,Q_star,E_saved_per_child,sessions_saved,sessions_delivered
+0,5,8,3.6,18.0,42.0
+1,10,5,3.3542,33.54,86.46
+2,20,8,2.9231,58.46,181.54
+total,35,--,3.143,110.0,310.0
