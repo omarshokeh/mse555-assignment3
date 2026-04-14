@@ -235,8 +235,7 @@ def train_classifiers(
     lr_pipe = Pipeline([
         ("scaler", StandardScaler()),
         ("clf", LogisticRegression(
-            multi_class="multinomial", solver="lbfgs",
-            max_iter=1000, random_state=RANDOM_STATE
+            solver="lbfgs", max_iter=1000, random_state=RANDOM_STATE
         )),
     ])
     lr_pipe.fit(X_train, y_train)

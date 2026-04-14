@@ -322,7 +322,7 @@ def print_k_comparison(
     cumulative: np.ndarray,
     tstar: np.ndarray,
     df: pd.DataFrame,
-) -> tuple[int, np.ndarray]:
+) -> tuple[int, np.ndarray, list[dict]]:
     """
     For K = 2..5, compute policy outcomes and print a comparison table.
     Returns (best_K, best_labels).
@@ -369,14 +369,12 @@ def print_k_comparison(
                   f"{p['E_saved_at_Qstar']:>15.3f} {pct:>7.1f}%")
 
     # --- pick best K ---
-    # K=3 is chosen: every K yields only 2 distinct Q* values (5 and 8),
-    # so we prefer the smallest K where both policies emerge with
-    # reasonably sized clusters.
-    best_k = 3
+    # Select K with maximum distinct Q* values, tiebreak by smallest K, then avg savings
+    best_k = max(results.keys(), key=lambda k: (results[k]["n_distinct_Qstar"], -k, results[k]["avg_savings"]))
     print(f"\n>>> Selected K={best_k} "
           f"({results[best_k]['n_distinct_Qstar']} distinct Q* values, "
           f"avg savings={results[best_k]['avg_savings']:.3f}) "
-          f"[chosen: smallest K with both Q* policies and balanced clusters]")
+          f"[criterion: max distinct Q*, tiebreak smallest K, then avg savings]")
 
     return best_k, results[best_k]["labels"], results[best_k]["policies"]
 
