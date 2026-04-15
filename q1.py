@@ -55,6 +55,10 @@ from typing import Any, Dict, List
 
 from tqdm import tqdm
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 
 # ============================================================================
 # CONFIG
@@ -290,7 +294,7 @@ def build_confusion_matrix(
 # TODO 1 of 3 — PROMPT
 # ============================================================================
 
-# System persona — used as the Anthropic `system` parameter in call_llm().
+# System persona — included in the Gemini prompt as top-level instructions.
 # Kept separate so the user message (returned by build_prompt) stays focused
 # on the notes and scoring instructions.
 _SYSTEM_PROMPT = (
@@ -412,13 +416,13 @@ Incorrect formats (do NOT use):
 
 def call_llm(prompt: str) -> str:
     """
-    Send a prompt to Claude claude-sonnet-4-20250514 and return the raw response text.
+    Send a prompt to Gemini via Google Generative Language API and return raw text.
 
-    Uses the Anthropic Python SDK with:
-    - A fixed system prompt (clinical SLP persona) for calibration
-    - temperature=0.0 for deterministic, reproducible scoring
-    - max_tokens=1024 (sufficient for an 11-integer JSON list)
-    - API key read from ANTHROPIC_API_KEY environment variable
+    Uses:
+    - GEMINI_API_KEY environment variable
+    - GEMINI_MODEL environment variable (defaults to gemini-pro)
+    - temperature=0.0 for deterministic scoring
+    - maxOutputTokens=1024 to allow the model to return the JSON list
 
     Parameters
     ----------
@@ -430,17 +434,48 @@ def call_llm(prompt: str) -> str:
     str
         The model's raw text response (parsing happens in parse_vector_from_response).
     """
-    import anthropic
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "Gemini API key not found. Set GEMINI_API_KEY in your environment or .env file."
+        )
 
-    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-    resp = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        temperature=0.0,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
+    model = os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash-lite")
+    if not model.startswith("models/"):
+        model = f"models/{model}"
+
+    from google.api_core.client_options import ClientOptions
+    from google.ai.generativelanguage_v1beta.services.generative_service.client import (
+        GenerativeServiceClient,
     )
-    return resp.content[0].text.strip()
+    from google.ai.generativelanguage_v1beta.types import content, generative_service
+
+    client = GenerativeServiceClient(client_options=ClientOptions(api_key=api_key))
+    request = generative_service.GenerateContentRequest(
+        model=model,
+        contents=[
+            content.Content(
+                parts=[content.Part(text=_SYSTEM_PROMPT + "\n\n" + prompt)]
+            )
+        ],
+        generation_config=generative_service.GenerationConfig(
+            temperature=0.0,
+            max_output_tokens=1024,
+        ),
+    )
+
+    response = client.generate_content(request=request)
+    candidates = response.candidates
+    if not candidates:
+        raise RuntimeError("Gemini API returned no candidates.")
+
+    candidate_text = []
+    for candidate in candidates:
+        for part in candidate.content.parts:
+            if getattr(part, "text", None) is not None:
+                candidate_text.append(part.text)
+
+    return "".join(candidate_text).strip()
 
 
 # ============================================================================
@@ -767,5 +802,6 @@ if __name__ == "__main__":
         output_path="output/q1/scored_notes.json",
     )
 
-    # Step 4: score all unlabeled clients (only after prompt is validated)
-    run_unlabeled_pipeline(UNLABELED_CONFIG)
+    # Step 2 — run run_test_pipeline(LABELED_CONFIG) to score the labeled set
+    #           and see your metrics + confusion matrix printed to the terminal
+    run_test_pipeline(LABELED_CONFIG)
